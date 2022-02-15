@@ -1,2 +1,17 @@
-# SMACM-temp-extremes
-Programs to investigate the impact of soil moisture on temperature extremes using the Soil Moisture Atmosphere Coupled Model, or SMACM. (Pronounced smack 'em.)
+# How does soil moisture impact temperature extremes?
+
+Written by: Adam Michael Bauer
+Affiliation: Department of Physics, University of Illinois at Urbana Champaign
+To contact: adammb4 [at] illinois [dot] edu
+
+## Contents:
+1. [Code description](#codedes)
+2. [Publication](#pubs)
+3. [Content](#content)
+
+## Code description <a name=“#codedes”></a>
+
+
+## Publication <a name=“pubs”></a>
+
+## Content of repo <a name=“content”></a>
