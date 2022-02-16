@@ -1,7 +1,9 @@
 # How does soil moisture impact temperature extremes?
 
 Written by: Adam Michael Bauer
+
 Affiliation: Department of Physics, University of Illinois at Urbana Champaign
+
 To contact: adammb4 [at] illinois [dot] edu
 
 ## Contents:
