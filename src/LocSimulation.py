@@ -16,10 +16,10 @@ to show that more "very dry" or "very warm" days happen in a global warming situ
 This code was created in support of a manuscript, with citation 
 Bauer, A. M. et al., On the impact of soil moisture on temperature extremes, in prep., 2022.
 """
+import datetime
 
 import numpy as np 
 import xarray as xr 
-import datetime
 
 class LocSimulation:
     """
@@ -29,19 +29,12 @@ class LocSimulation:
     of +5 K globally.
 
     args:
-    loc_string: string
-        location identifier string. to be used in filenames of saved outputs.
+    run_name: string
+        run identifier string. to be used in filenames of saved outputs.
 
-    param_dict: dictionary 
-        contains parameter values:
-            alpha_s:    dry radiative feedback from sensible heat flux 
-            alpha_r:    dry radiative feedback from downwards LW radiation
-            nu:         model parameter
-            m_0:        deep soil moisture content
-            F_mean:     mean daily solar radiation
-            F_std:      standard deviation of daily solar radiation
-            Td_mean:    mean daily mean dew point temperature
-            Td_std:     std daily mean dew point temperature
+    location: Location subclass
+        Location subclass containing all model parameters, as well as the 
+        amount of forcing increase we need to get ~5 K warming.
 
     N_summers: int
         number of summers to simulate (higher N_summers, better data)
@@ -51,51 +44,31 @@ class LocSimulation:
 
     import_precip: bool
         are we importing a previously made precip time series? 
+
+    max_warming: float
+        how much are we warming at peak? (in Kelvin)
 """
 
-    def __init__(self, loc_string, param_dict, N_simulations, N_summers, import_precip):
-        self.loc_string = loc_string
-        self.param_dict = param_dict
+    def __init__(self, run_name, location, N_simulations, N_summers, import_precip, max_warming):
+        self.run_name = run_name
+        self.loc = location
         self.N_summers = N_summers
         self.N_simulations = N_simulations
         self.import_precip = import_precip
+        self.max_warming = max_warming
 
         # make base filenames and path
-        self.path ="/data/keeling/a/adammb4/heatwaves-physics/data/heatwave-freq-data/"
+        self.path ="/data/" # UNCOMMENT WHEN READY TO PUSH
 
         current_date = datetime.datetime.now()
         year = str(current_date.year)
         day = str(current_date.day)
         month = str(current_date.month)
-        self.base_filename = month + '-' + day + '-' + year + '-' + self.loc_string + "-"
-
-        # of use constants
-        self.L = 2.5e6 # J / kg H20 
-        self.C = 4180 # J/K 
-        self.P_surf = 101325 # Pa
-        self.R_w = 461.52 # J / kg 
-        self.T_0 = 273.15 # K 
-        self.s_in_day = 86400 # s / day
-        self.maxT_departure = 5 # K, maximum amount dew point temperature inc
-
-        # extract parameters 
-        self.alpha_s = self.param_dict['alpha_s'] # dry feedback assoc. sensible heat flux
-        self.alpha_r = self.param_dict['alpha_r'] # dry feedback assoc. lw radiative 
-        self.alpha = self.alpha_s + self.alpha_r # total dry feedback 
-        self.nu = self.param_dict['nu'] # near surface air density / surface resistance 
-        self.mu = self.param_dict['mu'] # water capacity 
-        self.m_0 = self.param_dict['m_0'] # deep soil capacity
-        self.F_mean = self.param_dict['F_mean'] # mean daily sw radiative forcing 
-        self.F_std = self.param_dict['F_std'] # std daily sw radiative forcing 
-        self.Td_mean = self.param_dict['Td_mean'] # mean near surface daily dew point 
-        self.Td_std = self.param_dict['Td_std'] # std near surface daily dew point 
-        self.omega = self.param_dict['omega'] # in days / event (i.e., an event happens every omega days)
-        self.omega_s = self.omega * self.s_in_day # seconds / event
-        self.p_0 = self.param_dict['p_0'] # precip gamma dist shape param  
-        self.p_scale = self.param_dict['p_scale'] # precip gamma dist scale param
+        self.base_filename = month + '-' + day + '-' + year + '-' + self.run_name + "-"
 
         # number of days in N summers
         self.N_days = self.N_summers * 90 # 90 days in summer 
+        self.s_in_day = 86400 # s / day
         self.N_seconds = self.N_days * self.s_in_day # seconds in a summer 
         self.time = np.arange(0, self.N_seconds, 1) # make time in seconds total in simulation
         
@@ -108,22 +81,19 @@ class LocSimulation:
             print("Importing precip time series...")
             self.importPrecip()
 
-        # make T_d range
-        self.makeTdMeans()
-
-        # make gamma with Td_means 
-        self.makeMeanGammas()
+        # make F range
+        self.makeFMeans()
 
         # make mean taus and Zs 
-        self.taus = self.mu * self.F_mean**(-1) * (self.alpha * (self.nu * self.gamma_means)**(-1) + self.m_0 * self.L) 
-        self.Z_means = self.omega_s**(-1) * self.taus
+        self.taus = self.loc.mu * self.F_means**(-1) * ((self.loc.alpha_s + self.loc.alpha_r) * (self.loc.nu * self.loc.gamma)**(-1) + self.loc.m_0 * self.loc.L) 
+        self.Z_means = self.loc.omega_s**(-1) * self.taus
 
         # make forcings 
         self.makeDailyMeanForcingDists() # make daily mean forcing distributions for F and T_d 
 
         # make time series  
         self.T_ts = np.zeros((self.N_simulations, self.N_seconds))
-        self.T_ts[:, 0] = self.Td_means
+        self.T_ts[:, 0] = 300 # K, reasonable first value ?
         self.m_ts = np.zeros_like(self.T_ts)
 
          # make daily maximum temp and daily mean t & m 
@@ -132,9 +102,16 @@ class LocSimulation:
         self.m_dailymean = np.zeros_like(self.T_dailymax)
 
         # make array for exceedences 
-        self.Tmax_exceedences = np.zeros(self.N_simulations)
-        self.Tdaily_exceedences = np.zeros_like(self.Tmax_exceedences)
-        self.mdaily_exceedences = np.zeros_like(self.Tmax_exceedences)
+        self.Tmax_exceedences_dyn = np.zeros(self.N_simulations)
+        self.Tdaily_exceedences_dyn = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.Tmax_exceedences_stat = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.Tdaily_exceedences_stat = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.mdaily_exceedences = np.zeros_like(self.Tmax_exceedences_dyn)
+
+        # make array for percentiles 
+        self.Tmax_percentiles = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.Tdaily_percentiles = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.mdaily_percentiles = np.zeros_like(self.Tmax_exceedences_dyn)
 
         print("Location Simulation object ready!")
 
@@ -156,8 +133,8 @@ class LocSimulation:
         self.N_events = 0
         while sec <= self.N_seconds:
             if sec == freq_tracker:
-                self.P_ts[sec] = np.random.gamma(self.p_0, self.p_scale) # select precip event magnitude from gamma distribution 
-                freq_tracker += int(np.random.poisson(self.omega_s)) # the next event occurs freq_tracker + ~omega seconds later 
+                self.P_ts[sec] = np.random.gamma(self.loc.p_0, self.loc.p_scale) # select precip event magnitude from gamma distribution 
+                freq_tracker += int(np.random.poisson(self.loc.omega_s)) # the next event occurs freq_tracker + ~omega seconds later 
                 self.N_events += 1
 
             sec += 1
@@ -167,9 +144,10 @@ class LocSimulation:
                                          },
                                coords={"time": (["time"], self.time),}
                               )
-        precip_ds.to_netcdf(path=self.path + "precip_ts_" + str(self.N_summers)
-                            + "sum.nc",
-                           mode="w", format="NETCDF4", engine="netcdf4")
+        
+        precip_filename = self.path + "precip-ts-" + str(self.N_summers) + "sum-" + self.run_name + ".nc"
+
+        precip_ds.to_netcdf(path=precip_filename, mode="w", format="NETCDF4", engine="netcdf4")
         print("Done!")
 
     def importPrecip(self):
@@ -184,42 +162,28 @@ class LocSimulation:
             self.P_ts: precip forcing time series
         """
         # open precip netcdf
-        precip_filename = self.path + "precip_ts_" + str(self.N_summers) + "sum.nc"
+        precip_filename = self.path + "precip-ts-" + str(self.N_summers) + "sum-" + self.run_name + ".nc"
+
         precip_ds = xr.open_dataset(precip_filename)
-        
+
         # extract precip time series
         self.P_ts = precip_ds["precip"].values 
         print("Precip time series successfully imported!")
 
-    def makeTdMeans(self):
+    def makeFMeans(self):
         """
-        Create a list of dew point temperature means 
-        that increment to our max warming situation, which is 
-        a global temperature increase of 5 K
+        Create a list of radiatve forcing means 
+        that increment to our warming situation, which is 
+        a global radiative forcing of about 10 W m^-2
 
         Output: 
-            - self.Td_means: a list of dew point temperatures, incremented by 5 / N_simulations
+            - self.F_means: a list of dew point temperatures, incremented by 5 / N_simulations
         """
         print("Getting ready...")
-        self.Td_means = np.zeros(self.N_simulations)
-        increment = self.maxT_departure * self.N_simulations**(-1)
+        self.F_means = np.zeros(self.N_simulations)
+        increment = self.loc.F_warming_max * (self.N_simulations - 1)**(-1)
         for sim in range(0, self.N_simulations):
-            self.Td_means[sim] = self.Td_mean + sim * increment
-
-    def makeMeanGammas(self):
-        """
-        Create a list of mean gamma values for the increasing dew point temperature
-        in each simulation.
-
-        Output:
-            - gamma_means: an array of gamma values for the incremeneted dew point temperatures 
-        """
-        print("Hold on...")
-        factor1 = 6.11 * 100 # in pascals
-        factor2 = 0.622
-        exp_arg = self.L * self.R_w**(-1) * (self.T_0**(-1) - self.Td_means**(-1))
-        prefactor = factor1 * factor2 * self.L * (self.R_w * self.P_surf * self.Td_means**2)**(-1)
-        self.gamma_means = prefactor * np.exp(exp_arg) 
+            self.F_means[sim] = self.loc.F_warming_max + sim * increment
 
     def makeDailyMeanForcingDists(self):
         """
@@ -235,8 +199,8 @@ class LocSimulation:
         self.F_dists = np.zeros((self.N_simulations, self.N_days))
         self.Td_dists = np.zeros((self.N_simulations, self.N_days))
         for simulation in range(0, self.N_simulations):
-            self.F_dists[simulation, :] = np.random.normal(self.F_mean, self.F_std, self.N_days)
-            self.Td_dists[simulation, :] = np.random.normal(self.Td_means[simulation], self.Td_std, self.N_days)
+            self.F_dists[simulation, :] = np.random.normal(self.F_means[simulation], self.loc.F_std, self.N_days)
+            self.Td_dists[simulation, :] = np.random.normal(self.loc.Td_mean, self.loc.Td_std, self.N_days)
 
     def makeModelForcings(self):
         """
@@ -258,24 +222,41 @@ class LocSimulation:
 
         print("Finished!")
 
-
-    def makeForcedTimeSeries(self):
+    def makeForcedTimeSeries(self, save_output):
         """
         Carry out Newtonian integration of model equations to get time series for 
         soil moisture and temperature.
-
+        
+        Arguments:
+            - save_output: bool
+                Save output?
         Outputs:
             - T_ts: temperature time series 
             - m_ts: moisture time series 
         """
         print("Creating time series... (this could take a bit of time)")
         for sec in range(1, self.N_seconds):
-            self.T_ts[:, sec] = self.T_ts[:, sec - 1] + self.getTFlux(self.F_ts[:, sec - 1], self.Td_ts[:, sec - 1], self.T_ts[:, sec - 1], self.m_ts[:, sec - 1], self.gamma_means)
-            self.m_ts[:, sec] = self.m_ts[:, sec - 1] + self.getMFlux(self.P_ts[sec - 1], self.Td_ts[:, sec - 1], self.T_ts[:, sec - 1], self.m_ts[:, sec - 1], self.gamma_means) 
+            self.T_ts[:, sec] = self.T_ts[:, sec - 1] + self.getTFlux(self.F_ts[:, sec - 1], self.Td_ts[:, sec - 1], self.T_ts[:, sec - 1], self.m_ts[:, sec - 1])
+            self.m_ts[:, sec] = self.m_ts[:, sec - 1] + self.getMFlux(self.P_ts[sec - 1], self.Td_ts[:, sec - 1], self.T_ts[:, sec - 1], self.m_ts[:, sec - 1]) 
         
         print("Finished!")
 
-    def getTFlux(self, F, Td, T, m, gamma):
+        if save_output == True:
+            print("Saving forced time series...")
+            ts_ds = xr.Dataset(data_vars={"T_ts": (["F", "time"], self.T_ts),
+                                          "m_ts": (["F", "time"], self.m_ts)
+                                         },
+                               coords={"F": (["F"], self.F_means -
+                                             self.loc.F_mean),
+                                       "time": (["time"], self.time),}
+                              )
+           
+            ts_ds.to_netcdf(path=self.path+self.base_filename+"ts.nc",
+                            mode='w', format="NETCDF4", engine="netcdf4") # UNCOMMENT WHEN READY TO PUSH
+            
+            print("Done!")
+    
+    def getTFlux(self, F, Td, T, m):
         """
         Calculate T flux in SMACM.
 
@@ -288,12 +269,12 @@ class LocSimulation:
         Output:
             - returns T_flux
         """
-        feedback = self.alpha + self.L * gamma * self.nu * (m + self.m_0)
+        feedback = self.loc.alpha_s + self.loc.alpha_r + self.loc.L * self.loc.gamma * self.loc.nu * (m + self.loc.m_0)
         temp_diff = T - Td
-        T_flux = self.C**(-1) * (F - feedback * temp_diff)
+        T_flux = self.loc.C**(-1) * (F - feedback * temp_diff)
         return T_flux 
 
-    def getMFlux(self, P, Td, T, m, gamma):
+    def getMFlux(self, P, Td, T, m):
         """
         Calculate m flux in SMACM.
 
@@ -307,24 +288,19 @@ class LocSimulation:
             - returns m_flux
         """
         temp_diff = T - Td
-        m_flux = self.mu**(-1) * (P - temp_diff * self.nu * m * gamma)
+        m_flux = self.loc.mu**(-1) * (P - temp_diff * self.loc.nu * m * self.loc.gamma)
         return m_flux 
 
-    def makeExceedences(self, save_output, dynamic_baseline):
+    def makeExceedences(self, save_output):
         """
         Calculate the percentage of days which exceed the 95th percentile of
         the baseline daily mean and daily max temperature,
-        as well as the percentage of days which are below the 5th percentile of
-        the baseline daily mean soil moisture.
+        as well as the 95th percentile for each simulation. 
 
         Args:
             save_output: bool
             Should we save the output? If True, then a netCDF will be made with
             Z_means, Tmax, Tdaily, and mdaily exceedences recorded
-            
-            dynamic_baseline: bool
-            Should we shift the baseline for temperature in correspondence with
-            how the mean dew point temperature changes? 
 
         Output:
             - Tmax_exceedences: percentage of days where max daily temperature,
@@ -340,33 +316,47 @@ class LocSimulation:
         self.makeDailyMaximums() # make daily maximum array
         self.makeDailyMeans() # make daily mean arrays
 
+        print("Calculating 95th and 5th percentiles for each simulation...")
+        self.Tmax_percentiles = np.percentile(self.T_dailymax, 95, axis=1)
+        self.Tdaily_percentiles = np.percentile(self.T_dailymean, 95, axis=1)
+        self.mdaily_percentiles = np.percentile(self.m_dailymean, 5, axis=1)
+
         print("Calculating exceedences...")
         baseline_Tmax = np.percentile(self.T_dailymax[0, :], 95) # make baseline 95th percentile for daily ax temp
         baseline_Tdaily = np.percentile(self.T_dailymean[0, :], 95) # make baseline 95th percentile for daily mean temp
         baseline_mdaily = np.percentile(self.m_dailymean[0, :], 5) # make baseline 5th percentile for daily mean soil moisture
-        if dynamic_baseline == True:
-            increment = self.maxT_departure * self.N_simulations**(-1)
-            ex_filename = self.path + self.base_filename + "dyn_exceedences.nc"
-        else:
-            increment = 0 # if doing static baseline
-            ex_filename = self.path + self.base_filename + "exceedences.nc"
+
+        T_increment = self.max_warming * (self.N_simulations - 1)**(-1)
+        ex_filename = self.path + self.base_filename + "exc_perc.nc"
         
         for sim in range(0, self.N_simulations):
-            # tmax 
-            tmp_exceedence_indices_Tmax = np.where(self.T_dailymax[sim, :] >
-                                                   baseline_Tmax +
-                                                   increment) # gives indexes of exceedences 
-            tmp_N_exceedences_Tmax = np.shape(tmp_exceedence_indices_Tmax)[1]
-            tmp_percent_exceedences_Tmax = tmp_N_exceedences_Tmax * self.N_days**(-1) * 100
-            self.Tmax_exceedences[sim] = tmp_percent_exceedences_Tmax
+            # tmax dynamic
+            tmp_exceedence_indices_Tmax_dyn = np.where(self.T_dailymax[sim, :] >
+                                                   baseline_Tmax + sim * T_increment) # gives indexes of exceedences 
+            tmp_N_exceedences_Tmax_dyn = np.shape(tmp_exceedence_indices_Tmax_dyn)[1]
+            tmp_percent_exceedences_Tmax_dyn = tmp_N_exceedences_Tmax_dyn * self.N_days**(-1) * 100
+            self.Tmax_exceedences_dyn[sim] = tmp_percent_exceedences_Tmax_dyn
 
-            # t daily
-            tmp_exceedence_indices_tdaily = np.where(self.T_dailymean[sim, :] >
-                                                     baseline_Tdaily +
-                                                     increment) # gives indexes of exceedences 
-            tmp_N_exceedences_tdaily = np.shape(tmp_exceedence_indices_tdaily)[1]
-            tmp_percent_exceedences_tdaily = tmp_N_exceedences_tdaily * self.N_days**(-1) * 100
-            self.Tdaily_exceedences[sim] = tmp_percent_exceedences_tdaily
+            # t daily dynamic
+            tmp_exceedence_indices_tdaily_dyn = np.where(self.T_dailymean[sim, :] >
+                                                     baseline_Tdaily + sim * T_increment) # gives indexes of exceedences 
+            tmp_N_exceedences_tdaily_dyn = np.shape(tmp_exceedence_indices_tdaily_dyn)[1]
+            tmp_percent_exceedences_tdaily_dyn = tmp_N_exceedences_tdaily_dyn * self.N_days**(-1) * 100
+            self.Tdaily_exceedences_dyn[sim] = tmp_percent_exceedences_tdaily_dyn
+
+            # tmax static
+            tmp_exceedence_indices_Tmax_stat = np.where(self.T_dailymax[sim, :] >
+                                                   baseline_Tmax) # gives indexes of exceedences 
+            tmp_N_exceedences_Tmax_stat = np.shape(tmp_exceedence_indices_Tmax_stat)[1]
+            tmp_percent_exceedences_Tmax_stat = tmp_N_exceedences_Tmax_stat * self.N_days**(-1) * 100
+            self.Tmax_exceedences_stat[sim] = tmp_percent_exceedences_Tmax_stat
+
+            # t daily static
+            tmp_exceedence_indices_tdaily_stat = np.where(self.T_dailymean[sim, :] >
+                                                     baseline_Tdaily) # gives indexes of exceedences 
+            tmp_N_exceedences_tdaily_stat = np.shape(tmp_exceedence_indices_tdaily_stat)[1]
+            tmp_percent_exceedences_tdaily_stat = tmp_N_exceedences_tdaily_stat * self.N_days**(-1) * 100
+            self.Tdaily_exceedences_stat[sim] = tmp_percent_exceedences_tdaily_stat
 
             # m daily 
             tmp_exceedence_indices_mdaily = np.where(self.m_dailymean[sim, :] < baseline_mdaily) # gives indexes of exceedences 
@@ -378,21 +368,31 @@ class LocSimulation:
     
         if save_output == True:
             print("Saving exceedences product...")
-            exceedences_ds = xr.Dataset(data_vars={"mean_Z": (["dewpt_T"],
+            exceedences_ds = xr.Dataset(data_vars={"mean_Z": (["F"],
                                                               self.Z_means),
-                                                   "Tmax_ex": (["dewpt_T"],
-                                                               self.Tmax_exceedences),
-                                                   "Tdaily_ex": (["dewpt_T"],
-                                                                 self.Tdaily_exceedences),
-                                                   "mdaily_ex": (["dewpt_T"],
+                                                   "Tmax_ex_dyn": (["F"],
+                                                               self.Tmax_exceedences_dyn),
+                                                   "Tdaily_ex_dyn": (["F"],
+                                                                 self.Tdaily_exceedences_dyn),
+                                                    "Tmax_ex_stat": (["F"],
+                                                               self.Tmax_exceedences_stat),
+                                                   "Tdaily_ex_stat": (["F"],
+                                                                 self.Tdaily_exceedences_stat),
+                                                   "mdaily_ex": (["F"],
                                                                  self.mdaily_exceedences),
+                                                    "Tmax_95perc": (["F"],
+                                                                 self.Tmax_percentiles),
+                                                   "Tdaily_95perc": (["F"],
+                                                                 self.Tdaily_percentiles),
+                                                   "mdaily_5perc": (["F"],
+                                                                 self.mdaily_percentiles),
                                                   },
-                                        coords={"dewpt_T": (["dewpt_T"],
-                                                            self.Td_means),}
+                                        coords={"F": (["F"],
+                                                            self.F_means -
+                                                      self.loc.F_mean),}
                                        )
 
-            exceedences_ds.to_netcdf(path=ex_filename, mode="w",
-                                     format="NETCDF4", engine="netcdf4")
+            exceedences_ds.to_netcdf(path=ex_filename, mode="w", format="NETCDF4", engine="netcdf4")
 
             print("Done!")
 

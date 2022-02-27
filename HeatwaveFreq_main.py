@@ -2,7 +2,7 @@
 Adam Michael Bauer
 University of Illinois at Urbana Champaign
 adammb4@illinois.edu
-1/31/2022
+2.26.2022
 
 This code contains a class object which runs a simulation that calculates the 
 percent of days which exceed the 95th percentile of the baseline simulation.
@@ -14,70 +14,91 @@ by the current (baseline) 95th percentile.
 Notes (mostly to self):
     DON'T FORGET TO SAVE THE PRECIP TIME SERIES!! 
 
-To run: python MasterHeatwaveFreq.py [loc_string] [N_simulations] [N_summers]
-[dynamic_baseline]
-
-where:
-    - loc_string: string
-    - N_simulaitons: int
-    - N_summers: int
-    - dynamic_baseline: bool
+To run: python MasterHeatwaveFreq.py
 """
 
-from src.LocSimulation import LocSimulation
-from src.dictModelParams import loc_param_dict
-import matplotlib.pyplot as plt 
-import numpy as np
 import sys 
 
-"""
-LOC_STRING: tells you what location we're simulating for.
-Hopefully by the time the code is complete, this is the only parameter that
-will need to be changed.
-"""
-loc_string = sys.argv[1]
+import numpy as np 
+
+from src.LocSimulation import LocSimulation
+from src.tools import import_csv
+from src.locations.SGP import SGP
+from src.locations.DAL import DAL
+from src.locations.ATL import ATL
+from src.locations.SEA import SEA
+from src.locations.NY import NY
+from src.locations.WIT import WIT
 
 """
-Specify the number of simulations (i.e., the number of increments between 0 and 5 K global warming)
-and the number of summers we want to simulate for (the higher the better, generally). 
+Import data for runs.
 """
-N_simulations = int(sys.argv[2])
-N_summers = int(sys.argv[3])
+header, descriptions, data = import_csv("BVZP_research_runs", delimiter=',', header=True, indices=2)
 
 """
-import parameter dictionary from dictModelParams.py
+If you want one run done, select the run and do the below. 
+If you want all runs, comment the for statement and write 
+for run in range(0, len(descriptions)):
 """
-loc_param_dict = loc_param_dict[loc_string]
+desired_run = 6
+for run in (desired_run,):
+#for run in range(0, len(descriptions)):
+    run_name = descriptions[run][1]
+    print("Carrying out run %i, which corresponds to %s." % (run, run_name))
+    
+    """
+    loc_string: name of location we're simulating
+    max_warming: maximum amount of temperature warming in our simulation
+    N_simulations: number of sub-simulations leading up to maximum warming case
+    N_summers: number of summers we integrate the model equations for in each
+    simulation
+    import_precip: have we already made precip for this run? (check data
+    directory...)
+    """
+    loc_string, max_warming, N_simulations, N_summers, import_precip = data[run]
 
-"""
-dynamic baseline?
-sys.argv only supports strings as arguments, so here we convert the string
-"True" to a boolean True to be passed to the LocSimulation class.
-"""
-dynamic_baseline = sys.argv[4]
+    """
+    Cast variables from BVZP_research_runs.csv into proper forms.
+    """
+    max_warming = float(max_warming)
+    N_simulations = int(N_simulations)
+    N_summers = int(N_summers)
 
-if dynamic_baseline == "True":
-    dynamic_baseline = True
-else:
-    dynamic_baseline = False
+    """
+    import_precip and dyn_baseline must be boolean.
+    """
+    if import_precip == "True":
+        import_precip = True
+    else:
+        import_precip = False
 
-"""
-make class instance for location we have model parameter fits for
-"""
-LOC = LocSimulation(loc_string, loc_param_dict, N_simulations, N_summers,
-                    import_precip=True)
+    """
+    Make an instance of the class with name loc_string.
+    """
+    loc_constructor = globals()[loc_string]
+    loc = loc_constructor()
 
-"""
-make time series forcing
-"""
-LOC.makeModelForcings()
+    """
+    Calibrate warming simulations with max_warming.
+    """
+    loc.calibrate_warming_simulations(max_warming=max_warming)
 
-"""
-simulate model equations from SMACM
-"""
-LOC.makeForcedTimeSeries()
+    """
+    make class instance for location simulation
+    """
+    LOC = LocSimulation(run_name, loc, N_simulations, N_summers, import_precip=import_precip, max_warming=max_warming)
 
-"""
-calculate percentile exceedences for location
-"""
-LOC.makeExceedences(save_output=True, dynamic_baseline=dynamic_baseline)
+    """
+    make time series forcing
+    """
+    LOC.makeModelForcings()
+
+    """
+    simulate model equations from SMACM
+    """
+    LOC.makeForcedTimeSeries(save_output=False)
+
+    """
+    calculate percentile exceedences for location
+    """
+    LOC.makeExceedences(save_output=True)

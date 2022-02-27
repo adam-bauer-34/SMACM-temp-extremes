@@ -1,0 +1,8 @@
+run_number,run_name,loc_string,max_warming,N_simulations,N_summers,import_precip
+0,SGP-full,SGP,5,10,50,False
+1,WIT-full,WIT,5,10,50,False
+2,DAL-full,DAL,5,10,50,False
+3,NY-full,NY,5,10,50,False
+4,SEA-full,SEA,5,10,50,False
+5,ATL-full,ATL,5,10,50,False
+6,test-case,SGP,5,2,1,False
