@@ -65,7 +65,7 @@ for run in (desired_run,):
     N_summers = int(N_summers)
 
     """
-    import_precip and dyn_baseline must be boolean.
+    import_precip must be boolean.
     """
     if import_precip == "True":
         import_precip = True
