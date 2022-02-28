@@ -1,4 +1,5 @@
-"""
+"""Heatwave Frequency Experiment
+
 Adam Michael Bauer
 University of Illinois at Urbana Champaign
 adammb4@illinois.edu
@@ -17,9 +18,8 @@ Notes (mostly to self):
 To run: python MasterHeatwaveFreq.py
 """
 
-import sys 
-
 import numpy as np 
+import multiprocessing as mp 
 
 from src.LocSimulation import LocSimulation
 from src.tools import import_csv
@@ -30,19 +30,20 @@ from src.locations.SEA import SEA
 from src.locations.NY import NY
 from src.locations.WIT import WIT
 
-"""
-Import data for runs.
-"""
-header, descriptions, data = import_csv("BVZP_research_runs", delimiter=',', header=True, indices=2)
-
-"""
-If you want one run done, select the run and do the below. 
-If you want all runs, comment the for statement and write 
-for run in range(0, len(descriptions)):
-"""
-desired_run = 6
-for run in (desired_run,):
-#for run in range(0, len(descriptions)):
+def runLocSim(run):
+    """Run location simulation.
+    
+    Arguments
+    ---------
+    run: int
+        number of run we're doing
+    """
+    
+    """
+    Import data for runs.
+    """
+    header, descriptions, data = import_csv("BVZP_research_runs", delimiter=',', header=True, indices=2)
+    
     run_name = descriptions[run][1]
     print("Carrying out run %i, which corresponds to %s." % (run, run_name))
     
@@ -102,3 +103,16 @@ for run in (desired_run,):
     calculate percentile exceedences for location
     """
     LOC.makeExceedences(save_output=True)
+
+"""
+If you want one run done, select the run and do the below. 
+If you want all runs, comment the for statement and write 
+for run in range(0, len(descriptions)):
+"""
+desired_runs = [6,7]
+
+"""
+Run the desired runs in parallel using multiprocessing.
+"""
+with mp.Pool(mp.cpu_count()) as pool:
+    process = pool.map(runLocSim, desired_runs)

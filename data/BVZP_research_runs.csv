@@ -1,8 +1,9 @@
 run_number,run_name,loc_string,max_warming,N_simulations,N_summers,import_precip
-0,SGP-full,SGP,5,10,50,False
-1,WIT-full,WIT,5,10,50,False
-2,DAL-full,DAL,5,10,50,False
-3,NY-full,NY,5,10,50,False
-4,SEA-full,SEA,5,10,50,False
-5,ATL-full,ATL,5,10,50,False
+0,SGP-full,SGP,5,10,50,True
+1,WIT-full,WIT,5,10,50,True
+2,DAL-full,DAL,5,10,50,True
+3,NY-full,NY,5,10,50,True
+4,SEA-full,SEA,5,10,50,True
+5,ATL-full,ATL,5,10,50,True
 6,test-case,SGP,5,2,1,False
+7,test-case2,DAL,5,2,1,False

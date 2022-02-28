@@ -11,7 +11,7 @@ or "NY." NY is a subclass of the Location abstract class.
 import numpy as np 
 
 from .Location import Location
-
+ 
 class NY(Location):
     """
     Class object for New York, NY. Subclass of the Location

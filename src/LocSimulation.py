@@ -113,6 +113,11 @@ class LocSimulation:
         self.Tdaily_percentiles = np.zeros_like(self.Tmax_exceedences_dyn)
         self.mdaily_percentiles = np.zeros_like(self.Tmax_exceedences_dyn)
 
+        # make array for meaans 
+        self.Tmax_means = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.Tdaily_means = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.mdaily_means = np.zeros_like(self.Tmax_exceedences_dyn)
+
         print("Location Simulation object ready!")
 
     def makePrecipForcingTS(self):
@@ -321,6 +326,11 @@ class LocSimulation:
         self.Tdaily_percentiles = np.percentile(self.T_dailymean, 95, axis=1)
         self.mdaily_percentiles = np.percentile(self.m_dailymean, 5, axis=1)
 
+        print("Calculating means...")
+        self.Tmax_means = np.mean(self.T_dailymax, axis=1)
+        self.Tdaily_means = np.mean(self.T_dailymean, axis=1)
+        self.mdaily_means = np.mean(self.m_dailymean, axis=1)
+
         print("Calculating exceedences...")
         baseline_Tmax = np.percentile(self.T_dailymax[0, :], 95) # make baseline 95th percentile for daily ax temp
         baseline_Tdaily = np.percentile(self.T_dailymean[0, :], 95) # make baseline 95th percentile for daily mean temp
@@ -386,6 +396,12 @@ class LocSimulation:
                                                                  self.Tdaily_percentiles),
                                                    "mdaily_5perc": (["F"],
                                                                  self.mdaily_percentiles),
+                                                    "Tmax_mean": (["F"],
+                                                                 self.Tmax_means),
+                                                   "Tdaily_mean": (["F"],
+                                                                 self.Tdaily_means),
+                                                   "mdaily_mean": (["F"],
+                                                                 self.mdaily_means),
                                                   },
                                         coords={"F": (["F"],
                                                             self.F_means -
