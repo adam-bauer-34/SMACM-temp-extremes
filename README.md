@@ -18,7 +18,7 @@ This code integrates the model equations from the Soil Moisture Atmosphere Coupl
 Publication using this code is in preparation. Check back soon!
 
 ## Content of repo <a name=“content”></a>
-In the top directory is the main file, `HeatwaveFreq_main.py`. This is what a user would run to begin the simulation. 
+In the top directory is the main file, `HeatwaveFreq_main.py`. This is what a user would run to begin the simulation. In order to change which simulations are done, one must edit the `desired_runs` array in `HeatwaveFreq_main.py`.
 
 ### data
 The only file in this directory is BVZP_research_runs.csv. This file contains information about the various simulations that get ran in `HeatwaveFreq_main.py`. To add more runs, this file must be edited. 
