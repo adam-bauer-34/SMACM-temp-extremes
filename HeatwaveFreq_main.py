@@ -1,5 +1,4 @@
-"""Heatwave Frequency Experiment
-
+"""
 Adam Michael Bauer
 University of Illinois at Urbana Champaign
 adammb4@illinois.edu
@@ -18,8 +17,11 @@ Notes (mostly to self):
 To run: python MasterHeatwaveFreq.py
 """
 
+import sys 
+
 import numpy as np 
 import multiprocessing as mp 
+from numba import jit
 
 from src.LocSimulation import LocSimulation
 from src.tools import import_csv
@@ -105,11 +107,9 @@ def runLocSim(run):
     LOC.makeExceedences(save_output=True)
 
 """
-If you want one run done, select the run and do the below. 
-If you want all runs, comment the for statement and write 
-for run in range(0, len(descriptions)):
+Fill in the runs you want from BVZP_research_runs.csv
 """
-desired_runs = [6,7]
+desired_runs = [0,1,2,3,4,5]
 
 """
 Run the desired runs in parallel using multiprocessing.
