@@ -21,6 +21,8 @@ import datetime
 import numpy as np 
 import xarray as xr 
 
+from .SMACM_integration import integrate_SMACM
+
 class LocSimulation:
     """
     class: LocSimulation
@@ -64,13 +66,15 @@ class LocSimulation:
         year = str(current_date.year)
         day = str(current_date.day)
         month = str(current_date.month)
-        self.base_filename = month + '-' + day + '-' + year + '-' + self.run_name + "-"
+        self.base_filename = ''.join([month, '-', day, '-', year, '-',
+                                      self.run_name, '-'])
 
         # number of days in N summers
         self.N_days = self.N_summers * 90 # 90 days in summer 
         self.s_in_day = 86400 # s / day
         self.N_seconds = self.N_days * self.s_in_day # seconds in a summer 
         self.time = np.arange(0, self.N_seconds, 1) # make time in seconds total in simulation
+        self.days = np.arange(0, self.N_days, 1)
         
         # if making new precip time series, make it. if not, import it.
         if self.import_precip == False:
@@ -85,16 +89,19 @@ class LocSimulation:
         self.makeFMeans()
 
         # make mean taus and Zs 
-        self.taus = self.loc.mu * self.F_means**(-1) * ((self.loc.alpha_s + self.loc.alpha_r) * (self.loc.nu * self.loc.gamma)**(-1) + self.loc.m_0 * self.loc.L) 
+        self.taus = self.loc.mu * self.F_means**(-1) * ((self.loc.alpha_s +
+                                                         self.loc.alpha_r) *
+                                                        (self.loc.nu *
+                                                         self.loc.gamma)**(-1)
+                                                        + self.loc.m_0 *
+                                                        self.loc.L) 
         self.Z_means = self.loc.omega_s**(-1) * self.taus
 
         # make forcings 
         self.makeDailyMeanForcingDists() # make daily mean forcing distributions for F and T_d 
 
-        # make time series  
-        self.T_ts = np.zeros((self.N_simulations, self.N_seconds))
-        self.T_ts[:, 0] = 300 # K, reasonable first value ?
-        self.m_ts = np.zeros_like(self.T_ts)
+        # initial conditions for temperature, moisture simulation
+        self.ics = np.asarray([290, 0])
 
          # make daily maximum temp and daily mean t & m 
         self.T_dailymax = np.zeros((self.N_simulations, self.N_days)) 
@@ -150,7 +157,9 @@ class LocSimulation:
                                coords={"time": (["time"], self.time),}
                               )
         
-        precip_filename = self.path + "precip-ts-" + str(self.N_summers) + "sum-" + self.run_name + ".nc"
+        precip_filename = ''.join([self.path, "precip-ts-",
+                                   str(self.N_summers), "sum-", self.run_name,
+                                   ".nc"])
 
         precip_ds.to_netcdf(path=precip_filename, mode="w", format="NETCDF4", engine="netcdf4")
         print("Done!")
@@ -167,7 +176,9 @@ class LocSimulation:
             self.P_ts: precip forcing time series
         """
         # open precip netcdf
-        precip_filename = self.path + "precip-ts-" + str(self.N_summers) + "sum-" + self.run_name + ".nc"
+        precip_filename = ''.join([self.path, "precip-ts-",
+                                   str(self.N_summers), "sum-", self.run_name,
+                                   ".nc"])
 
         precip_ds = xr.open_dataset(precip_filename)
 
@@ -188,7 +199,7 @@ class LocSimulation:
         self.F_means = np.zeros(self.N_simulations)
         increment = self.loc.F_warming_max * (self.N_simulations - 1)**(-1)
         for sim in range(0, self.N_simulations):
-            self.F_means[sim] = self.loc.F_warming_max + sim * increment
+            self.F_means[sim] = self.loc.F_mean + sim * increment
 
     def makeDailyMeanForcingDists(self):
         """
@@ -240,10 +251,8 @@ class LocSimulation:
             - m_ts: moisture time series 
         """
         print("Creating time series... (this could take a bit of time)")
-        for sec in range(1, self.N_seconds):
-            self.T_ts[:, sec] = self.T_ts[:, sec - 1] + self.getTFlux(self.F_ts[:, sec - 1], self.Td_ts[:, sec - 1], self.T_ts[:, sec - 1], self.m_ts[:, sec - 1])
-            self.m_ts[:, sec] = self.m_ts[:, sec - 1] + self.getMFlux(self.P_ts[sec - 1], self.Td_ts[:, sec - 1], self.T_ts[:, sec - 1], self.m_ts[:, sec - 1]) 
-        
+        model_params = np.asarray([self.loc.alpha_s, self.loc.alpha_r, self.loc.L, self.loc.gamma, self.loc.nu, self.loc.m_0, self.loc.C, self.loc.mu], dtype=np.float32)
+        self.T_ts, self.m_ts = integrate_SMACM(self.N_seconds, self.ics, self.P_ts, self.F_ts, self.Td_ts, model_params)
         print("Finished!")
 
         if save_output == True:
@@ -256,45 +265,11 @@ class LocSimulation:
                                        "time": (["time"], self.time),}
                               )
            
-            ts_ds.to_netcdf(path=self.path+self.base_filename+"ts.nc",
+            ts_ds.to_netcdf(path=''.join([self.path,
+                                          self.base_filename, "ts.nc"]),
                             mode='w', format="NETCDF4", engine="netcdf4") # UNCOMMENT WHEN READY TO PUSH
             
             print("Done!")
-    
-    def getTFlux(self, F, Td, T, m):
-        """
-        Calculate T flux in SMACM.
-
-        F: radiative forcing (W / m^2)
-        Td: dew point temperature (K)
-        T: temperature (K)
-        m: soil moisture (in fractional units)
-        gamma: derivative of clausius clapeyron relationship eval'd at mean dew point temp (K^-1)
-
-        Output:
-            - returns T_flux
-        """
-        feedback = self.loc.alpha_s + self.loc.alpha_r + self.loc.L * self.loc.gamma * self.loc.nu * (m + self.loc.m_0)
-        temp_diff = T - Td
-        T_flux = self.loc.C**(-1) * (F - feedback * temp_diff)
-        return T_flux 
-
-    def getMFlux(self, P, Td, T, m):
-        """
-        Calculate m flux in SMACM.
-
-        P: precip forcing (fractional units)
-        Td: dew point temperature (K)
-        T: temperature (K)
-        m: soil moisture (in fractional units)
-        gamma: derivative of clausius clapeyron relationship eval'd at mean dew point temp (K^-1)
-
-        Output:
-            - returns m_flux
-        """
-        temp_diff = T - Td
-        m_flux = self.loc.mu**(-1) * (P - temp_diff * self.loc.nu * m * self.loc.gamma)
-        return m_flux 
 
     def makeExceedences(self, save_output):
         """
@@ -337,7 +312,7 @@ class LocSimulation:
         baseline_mdaily = np.percentile(self.m_dailymean[0, :], 5) # make baseline 5th percentile for daily mean soil moisture
 
         T_increment = self.max_warming * (self.N_simulations - 1)**(-1)
-        ex_filename = self.path + self.base_filename + "exc_perc.nc"
+        ex_filename = ''.join([self.path, self.base_filename, "exc_perc.nc"])
         
         for sim in range(0, self.N_simulations):
             # tmax dynamic
@@ -396,16 +371,25 @@ class LocSimulation:
                                                                  self.Tdaily_percentiles),
                                                    "mdaily_5perc": (["F"],
                                                                  self.mdaily_percentiles),
-                                                    "Tmax_mean": (["F"],
+                                                    "Tmax_mean_sim": (["F"],
                                                                  self.Tmax_means),
-                                                   "Tdaily_mean": (["F"],
+                                                   "Tdaily_mean_sim": (["F"],
                                                                  self.Tdaily_means),
-                                                   "mdaily_mean": (["F"],
+                                                   "mdaily_mean_sim": (["F"],
                                                                  self.mdaily_means),
+                                                   "Tdaily_mean": (["F",
+                                                                    "day"],
+                                                                   self.T_dailymean),
+                                                   "Tmax_daily": (["F", "day"],
+                                                                 self.T_dailymax),
+                                                   "mdaily_mean": (["F",
+                                                                    "day"],
+                                                                   self.m_dailymean),
                                                   },
                                         coords={"F": (["F"],
                                                             self.F_means -
-                                                      self.loc.F_mean),}
+                                                      self.loc.F_mean),
+                                                "day": (['day'], self.days),}
                                        )
 
             exceedences_ds.to_netcdf(path=ex_filename, mode="w", format="NETCDF4", engine="netcdf4")

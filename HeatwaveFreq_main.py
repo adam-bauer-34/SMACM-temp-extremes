@@ -1,4 +1,5 @@
-"""
+"""Main file for heatwave frequency experiment 
+
 Adam Michael Bauer
 University of Illinois at Urbana Champaign
 adammb4@illinois.edu
@@ -17,12 +18,6 @@ Notes (mostly to self):
 To run: python MasterHeatwaveFreq.py
 """
 
-import sys 
-
-import numpy as np 
-import multiprocessing as mp 
-from numba import jit
-
 from src.LocSimulation import LocSimulation
 from src.tools import import_csv
 from src.locations.SGP import SGP
@@ -32,23 +27,21 @@ from src.locations.SEA import SEA
 from src.locations.NY import NY
 from src.locations.WIT import WIT
 
-def runLocSim(run):
-    """Run location simulation.
-    
-    Arguments
-    ---------
-    run: int
-        number of run we're doing
-    """
-    
-    """
-    Import data for runs.
-    """
-    header, descriptions, data = import_csv("BVZP_research_runs", delimiter=',', header=True, indices=2)
-    
+
+"""
+Fill in the runs you want from BVZP_research_runs.csv
+"""
+desired_runs = [0,1,2,3,4,5]
+
+""" 
+Import data for runs.
+"""
+header, descriptions, data = import_csv("BVZP_research_runs", delimiter=',', header=True, indices=2)
+
+for run in desired_runs:
     run_name = descriptions[run][1]
     print("Carrying out run %i, which corresponds to %s." % (run, run_name))
-    
+
     """
     loc_string: name of location we're simulating
     max_warming: maximum amount of temperature warming in our simulation
@@ -104,15 +97,4 @@ def runLocSim(run):
     """
     calculate percentile exceedences for location
     """
-    LOC.makeExceedences(save_output=True)
-
-"""
-Fill in the runs you want from BVZP_research_runs.csv
-"""
-desired_runs = [0,1,2,3,4,5]
-
-"""
-Run the desired runs in parallel using multiprocessing.
-"""
-with mp.Pool(mp.cpu_count()) as pool:
-    process = pool.map(runLocSim, desired_runs)
+    LOC.makeExceedences(save_output=False)
