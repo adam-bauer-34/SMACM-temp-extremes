@@ -87,14 +87,14 @@ for run in desired_runs:
     """
     make time series forcing
     """
-    LOC.makeModelForcings()
+    LOC.make_model_forcings()
 
     """
     simulate model equations from SMACM
     """
-    LOC.makeForcedTimeSeries(save_output=True)
+    LOC.make_forced_ts(save_output=True)
 
     """
     calculate percentile exceedences for location
     """
-    LOC.makeExceedences(save_output=True)
+    LOC.make_simulation_output(save_output=True)

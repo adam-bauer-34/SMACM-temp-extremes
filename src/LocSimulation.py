@@ -19,6 +19,7 @@ to show that more "very dry" or "very warm" days happen in a global warming situ
 This code was created in support of a manuscript, with citation 
 Bauer, A. M. et al., On the impact of soil moisture on temperature extremes, in prep., 2022.
 """
+
 import datetime
 
 import numpy as np 
@@ -82,14 +83,14 @@ class LocSimulation:
         # if making new precip time series, make it. if not, import it.
         if self.import_precip == False:
             print("Making new precip forcing...")
-            self.makePrecipForcingTS()
+            self._make_precip_forcing_ts()
         
         else:
             print("Importing precip time series...")
-            self.importPrecip()
+            self._import_precip()
 
         # make F range
-        self.makeFMeans()
+        self._make_F_means()
 
         # make mean taus and Zs 
         self.taus = self.loc.mu * self.F_means**(-1) * ((self.loc.alpha_s +
@@ -101,7 +102,7 @@ class LocSimulation:
         self.Z_means = self.loc.omega_s**(-1) * self.taus
 
         # make forcings 
-        self.makeDailyMeanForcingDists() # make daily mean forcing distributions for F and T_d 
+        self._make_daily_forcing_means() # make daily mean forcing distributions for F and T_d 
 
         # initial conditions for temperature, moisture simulation
         self.ics = np.asarray([290, 0])
@@ -130,7 +131,7 @@ class LocSimulation:
 
         print("Location Simulation object ready!")
 
-    def makePrecipForcingTS(self):
+    def _make_precip_forcing_ts(self):
         """
         Create a precipitation time series for other simulations. Each precip
         event will be drawn from a Gamma distribution with shape parameter
@@ -167,7 +168,7 @@ class LocSimulation:
         precip_ds.to_netcdf(path=precip_filename, mode="w", format="NETCDF4", engine="netcdf4")
         print("Done!")
 
-    def importPrecip(self):
+    def _import_precip(self):
         """
         Import precip time series to force the model equations.
 
@@ -189,7 +190,7 @@ class LocSimulation:
         self.P_ts = precip_ds["precip"].values 
         print("Precip time series successfully imported!")
 
-    def makeFMeans(self):
+    def _make_F_means(self):
         """
         Create a list of radiatve forcing means 
         that increment to our warming situation, which is 
@@ -204,7 +205,7 @@ class LocSimulation:
         for sim in range(0, self.N_simulations):
             self.F_means[sim] = self.loc.F_mean + sim * increment
 
-    def makeDailyMeanForcingDists(self):
+    def _make_daily_forcing_means(self):
         """
         Make daily mean distributions for radiative forcing and dew point temperature.
 
@@ -221,7 +222,7 @@ class LocSimulation:
             self.F_dists[simulation, :] = np.random.normal(self.F_means[simulation], self.loc.F_std, self.N_days)
             self.Td_dists[simulation, :] = np.random.normal(self.loc.Td_mean, self.loc.Td_std, self.N_days)
 
-    def makeModelForcings(self):
+    def make_model_forcings(self):
         """
         Takes daily means and makes them into second-by-second time series. 
 
@@ -241,7 +242,7 @@ class LocSimulation:
 
         print("Finished!")
 
-    def makeForcedTimeSeries(self, save_output):
+    def make_forced_ts(self, save_output):
         """
         Carry out Newtonian integration of model equations to get time series for 
         soil moisture and temperature.
@@ -274,7 +275,7 @@ class LocSimulation:
             
             print("Done!")
 
-    def makeExceedences(self, save_output):
+    def make_simulation_output(self, save_output):
         """
         Calculate the percentage of days which exceed the 95th percentile of
         the baseline daily mean and daily max temperature,
@@ -296,8 +297,8 @@ class LocSimulation:
             moisture, in incremented simulation, falls below the 5th percentile
             daily mean soil moisture 
         """
-        self.makeDailyMaximums() # make daily maximum array
-        self.makeDailyMeans() # make daily mean arrays
+        self._make_daily_maximums() # make daily maximum array
+        self._make_daily_means() # make daily mean arrays
 
         print("Calculating 95th and 5th percentiles for each simulation...")
         self.Tmax_percentiles = np.percentile(self.T_dailymax, 95, axis=1)
@@ -399,7 +400,7 @@ class LocSimulation:
 
             print("Done!")
 
-    def makeDailyMaximums(self):
+    def _make_daily_maximums(self):
         """
         Makes an array of daily maximums for temperature simulation.
 
@@ -412,7 +413,7 @@ class LocSimulation:
                 self.T_dailymax[simulation, day] = np.max(self.T_ts[simulation, int(day * self.s_in_day):int((day + 1) * self.s_in_day)]) # take maximum from day's worth of points
         print("Finnished!")
 
-    def makeDailyMeans(self):
+    def _make_daily_means(self):
         """
         Makes an array of daily means for temperature and soil moisture simulations.
 
