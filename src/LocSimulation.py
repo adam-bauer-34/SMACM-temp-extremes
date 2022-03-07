@@ -1,6 +1,9 @@
-"""
+"""Location simulation object
+
 Adam Michael Bauer
+University of Illinois at Urbana Champaign
 adammb4@illinois.edu
+3.7.2022
 
 This code is a class object which carries out a numerical integration of the 
 model equations in SMACM. It's purpose is to integrate the model equations 

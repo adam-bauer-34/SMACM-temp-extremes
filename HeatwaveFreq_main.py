@@ -8,9 +8,10 @@ adammb4@illinois.edu
 This code contains a class object which runs a simulation that calculates the 
 percent of days which exceed the 95th percentile of the baseline simulation.
 
-The code increments the dew point temperature by 5 K over the current average
+The code increments the temperature by 5 K over the current average
 and measures what percentage of daily max temperature exceeds the baseline set 
-by the current (baseline) 95th percentile. 
+by the current (baseline) 95th percentile, as well as the daily mean, daily max temperature,
+and the daily mean soil moisture.
 
 Notes (mostly to self):
     DON'T FORGET TO SAVE THE PRECIP TIME SERIES!! 
@@ -26,7 +27,6 @@ from src.locations.ATL import ATL
 from src.locations.SEA import SEA
 from src.locations.NY import NY
 from src.locations.WIT import WIT
-
 
 """
 Fill in the runs you want from BVZP_research_runs.csv
@@ -49,7 +49,7 @@ for run in desired_runs:
     N_summers: number of summers we integrate the model equations for in each
     simulation
     import_precip: have we already made precip for this run? (check data
-    directory...)
+    directory!)
     """
     loc_string, max_warming, N_simulations, N_summers, import_precip = data[run]
 
@@ -92,9 +92,9 @@ for run in desired_runs:
     """
     simulate model equations from SMACM
     """
-    LOC.makeForcedTimeSeries(save_output=False)
+    LOC.makeForcedTimeSeries(save_output=True)
 
     """
     calculate percentile exceedences for location
     """
-    LOC.makeExceedences(save_output=False)
+    LOC.makeExceedences(save_output=True)
