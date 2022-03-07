@@ -29,7 +29,7 @@ Any data made by the simulation will be saved to this directory.
 The analysis notebook for this code is contained here. The notebook comes prepared to be edited easily to make plots analyzing the data. Such plots are exceedence data against the climatological *Z* parameter, the change in mean/max temperature as a function of *Z* for each simulation, as well as daily mean/max temperature histograms and estimated PDFs using KDE methods. 
 
 ### src
-`LocSimulation.py` is where most of the computations occur. It contains a fairly large class object `LocSimulation` which is called by `HeatwaveFreq_main.py`. `tools.py` contains a variety of I/O functions. 
+`LocSimulation.py` is where most of the computations occur. It contains a fairly large class object `LocSimulation` which is called by `HeatwaveFreq_main.py`. `tools.py` contains a variety of I/O functions which were originally written by Litterman/Daniel/Wagner [here](https://github.com/Litterman/EZClimate).
 
 #### locations
 Contains the abstract location class `Location.py`, from which each subclass is sourced (such as `SGP.py`). Each of these files contains information on a location that was analyzed in our paper, such as key model parameter vaues and methods for location-specific simulation calibration.
