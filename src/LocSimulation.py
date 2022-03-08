@@ -150,14 +150,14 @@ class LocSimulation:
         while sec <= self.N_seconds:
             if sec == freq_tracker:
                 self.P_ts[sec] = np.random.gamma(self.loc.p_0, self.loc.p_scale) # select precip event magnitude from gamma distribution 
-                freq_tracker += int(np.random.poisson(self.loc.omega_s)) # the next event occurs freq_tracker + ~omega seconds later 
+                freq_tracker += int(np.random.exponential(self.loc.omega_s)) # the next event occurs freq_tracker + ~omega seconds later 
                 self.N_events += 1
 
             sec += 1
         
         print("Saving precipitation time series...")
         precip_ds = xr.Dataset(data_vars={"precip": (["time"], self.P_ts),
-                                         },
+                                         },             
                                coords={"time": (["time"], self.time),}
                               )
         
