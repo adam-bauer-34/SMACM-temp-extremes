@@ -14,7 +14,7 @@ import numpy as np
 from numba import jit
 
 @jit(nopython=True)
-def integrate_SMACM(N_seconds, ics, P_ts, F_ts, Td_ts, model_params):
+def integrate_SMACM(N_seconds, ics, dt, P_ts, F_ts, Td_ts, model_params):
     """Numerically integrate a set of equations using Newton's method.
 
     Parameters
@@ -45,8 +45,21 @@ def integrate_SMACM(N_seconds, ics, P_ts, F_ts, Td_ts, model_params):
     T_ts[:, 0], m_ts[:, 0] = ics
 
     for sec in range(1, N_seconds):
-        T_ts[:, sec] = T_ts[:, sec - 1] + T_flux(T_ts[:, sec - 1], m_ts[:, sec - 1], F_ts[:, sec - 1], Td_ts[:, sec - 1], model_params)
-        m_ts[:, sec] = m_ts[:, sec - 1] + m_flux(T_ts[:, sec - 1], m_ts[:, sec - 1], P_ts[sec - 1], Td_ts[:, sec - 1], model_params) 
+        T_ts[:, sec] = T_ts[:, sec - 1] + dt * T_flux(T_ts[:, sec - 1], m_ts[:, sec
+                                                                        - 1],
+                                                 F_ts[:, sec - 1], Td_ts[:, sec
+                                                                         - 1],
+                                                 model_params)
+        tmp_m = m_ts[:, sec - 1] + dt * m_flux(T_ts[:, sec - 1], m_ts[:, sec - 1],
+                                          P_ts[sec - 1], Td_ts[:, sec - 1],
+                                          model_params)
+        
+        # make sure m never exceeds one
+        for i in range(np.shape(tmp_m)[0]):
+            if tmp_m[i] > 1:
+                tmp_m[i] = 1
+
+        m_ts[:, sec] = tmp_m
 
     return T_ts, m_ts
 
@@ -104,5 +117,6 @@ def m_flux(T, m, P, Td, model_params):
     alpha_s, alpha_r, L, gamma, nu, m_0, C, mu = model_params
 
     temp_diff = T - Td
-    flux = mu**(-1) * (P - temp_diff * nu * m * gamma)
+    flux = P - mu**(-1) * temp_diff * nu * m * gamma
+
     return flux 

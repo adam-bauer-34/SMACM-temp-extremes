@@ -1,23 +1,24 @@
-"""Location simulation object
+"""Location simulation class
 
 Adam Michael Bauer
 University of Illinois at Urbana Champaign
 adammb4@illinois.edu
 3.7.2022
 
-This code is a class object which carries out a numerical integration of the 
-model equations in SMACM. It's purpose is to integrate the model equations 
-in numerous different scenarios, each with an increasing mean dew point 
-temperature. It then calculates a baseline percentile for low soil moisture 
-(5th percentile in daily mean soil moisture), high daily mean temperature (95th 
-percentile), and daily max temperature (95th percentile).
+This code is a class object which carries out a numerical integration of the
+model equations in SMACM. It's purpose is to integrate the model equations
+in numerous different scenarios, each with an increasing mean radiative
+forcing. It then calculates a baseline percentile for low soil moisture
+(5th percentile in daily mean soil moisture) and high daily mean temperature
+(95th percentile).
 
-In each of the remaining simulations with higher mean dew point temperature, the 
+In each of the remaining simulations with higher mean radiative forcing, the
 percent of days which exceed these baselines are calculated. This is intended
-to show that more "very dry" or "very warm" days happen in a global warming situation. 
+to show that more "very dry" or "very warm" days happen in a global warming situation.
 
-This code was created in support of a manuscript, with citation 
-Bauer, A. M. et al., On the impact of soil moisture on temperature extremes, in prep., 2022.
+This code was created in support of a manuscript, with citation
+Bauer, A. M. et al., On the impact of soil moisture on temperature extremes, in
+prep., 2022.
 """
 
 import datetime
@@ -53,18 +54,23 @@ class LocSimulation:
 
     max_warming: float
         how much are we warming at peak? (in Kelvin)
+
+    dt: int
+        time step for numerical integration
 """
 
-    def __init__(self, run_name, location, N_simulations, N_summers, import_precip, max_warming):
+    def __init__(self, run_name, location, N_simulations, N_summers,
+                 import_precip, max_warming, dt = 10):
         self.run_name = run_name
         self.loc = location
         self.N_summers = N_summers
         self.N_simulations = N_simulations
-        self.import_precip = import_precip
-        self.max_warming = max_warming
+        self.import_precip = import_precip 
+        self.max_warming = max_warming # calibrated max warming
+        self.dt = int(dt) # time step
 
         # make base filenames and path
-        self.path ="/data/" # UNCOMMENT WHEN READY TO PUSH
+        self.path = "/data/" # UNCOMMENT WHEN READY TO PUSH
 
         current_date = datetime.datetime.now()
         year = str(current_date.year)
@@ -75,8 +81,9 @@ class LocSimulation:
 
         # number of days in N summers
         self.N_days = self.N_summers * 90 # 90 days in summer 
-        self.s_in_day = 86400 # s / day
-        self.N_seconds = self.N_days * self.s_in_day # seconds in a summer 
+        self.s_in_day = 86400 // self.dt # s / day
+        # calc the number of seconds in a summer of integration
+        self.N_seconds = self.N_days * self.s_in_day
         self.time = np.arange(0, self.N_seconds, 1) # make time in seconds total in simulation
         self.days = np.arange(0, self.N_days, 1)
         
@@ -98,7 +105,7 @@ class LocSimulation:
                                                         (self.loc.nu *
                                                          self.loc.gamma)**(-1)
                                                         + self.loc.m_0 *
-                                                        self.loc.L) 
+                                                        self.loc.L)
         self.Z_means = self.loc.omega_s**(-1) * self.taus
 
         # make forcings 
@@ -108,26 +115,22 @@ class LocSimulation:
         self.ics = np.asarray([290, 0])
 
          # make daily maximum temp and daily mean t & m 
-        self.T_dailymax = np.zeros((self.N_simulations, self.N_days)) 
-        self.T_dailymean = np.zeros_like(self.T_dailymax)
-        self.m_dailymean = np.zeros_like(self.T_dailymax)
+        self.T_dailymean = np.zeros((self.N_simulations, self.N_days))
+        self.m_dailymean = np.zeros_like(self.T_dailymean)
 
         # make array for exceedences 
-        self.Tmax_exceedences_dyn = np.zeros(self.N_simulations)
-        self.Tdaily_exceedences_dyn = np.zeros_like(self.Tmax_exceedences_dyn)
-        self.Tmax_exceedences_stat = np.zeros_like(self.Tmax_exceedences_dyn)
-        self.Tdaily_exceedences_stat = np.zeros_like(self.Tmax_exceedences_dyn)
-        self.mdaily_exceedences = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.Tdaily_exc_stat = np.zeros(self.N_simulations)
+        self.Tdaily_exc_mean_base = np.zeros_like(self.Tdaily_exc_stat)
+        self.Tdaily_exc_exp_base = np.zeros_like(self.Tdaily_exc_stat)
+        self.mdaily_exc = np.zeros_like(self.Tdaily_exc_stat)
 
         # make array for percentiles 
-        self.Tmax_percentiles = np.zeros_like(self.Tmax_exceedences_dyn)
-        self.Tdaily_percentiles = np.zeros_like(self.Tmax_exceedences_dyn)
-        self.mdaily_percentiles = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.Tdaily_95percs = np.zeros_like(self.Tdaily_exc_stat)
+        self.mdaily_5percs = np.zeros_like(self.Tdaily_exc_stat)
 
         # make array for meaans 
-        self.Tmax_means = np.zeros_like(self.Tmax_exceedences_dyn)
-        self.Tdaily_means = np.zeros_like(self.Tmax_exceedences_dyn)
-        self.mdaily_means = np.zeros_like(self.Tmax_exceedences_dyn)
+        self.Tdaily_means = np.zeros_like(self.Tdaily_exc_stat)
+        self.mdaily_means = np.zeros_like(self.Tdaily_exc_stat)
 
         print("Location Simulation object ready!")
 
@@ -149,21 +152,24 @@ class LocSimulation:
         self.N_events = 0
         while sec <= self.N_seconds:
             if sec == freq_tracker:
-                self.P_ts[sec] = np.random.gamma(self.loc.p_0, self.loc.p_scale) # select precip event magnitude from gamma distribution 
-                freq_tracker += int(np.random.exponential(self.loc.omega_s)) # the next event occurs freq_tracker + ~omega seconds later 
+                # select precip event mag from gamma dist
+                self.P_ts[sec] = np.random.gamma(self.loc.p_0, self.loc.p_scale)
+                # the next event occurs freq_tracker + omega s later
+                freq_tracker += int(np.random.exponential(self.loc.omega *
+                                                          self.s_in_day))
                 self.N_events += 1
 
             sec += 1
         
         print("Saving precipitation time series...")
         precip_ds = xr.Dataset(data_vars={"precip": (["time"], self.P_ts),
-                                         },             
+                                         },
                                coords={"time": (["time"], self.time),}
                               )
         
         precip_filename = ''.join([self.path, "precip-ts-",
                                    str(self.N_summers), "sum-", self.run_name,
-                                   ".nc"])
+                                   "-dt-", str(self.dt), ".nc"])
 
         precip_ds.to_netcdf(path=precip_filename, mode="w", format="NETCDF4", engine="netcdf4")
         print("Done!")
@@ -182,12 +188,12 @@ class LocSimulation:
         # open precip netcdf
         precip_filename = ''.join([self.path, "precip-ts-",
                                    str(self.N_summers), "sum-", self.run_name,
-                                   ".nc"])
+                                   "-dt-", str(self.dt), ".nc"])
 
         precip_ds = xr.open_dataset(precip_filename)
 
         # extract precip time series
-        self.P_ts = precip_ds["precip"].values 
+        self.P_ts = precip_ds["precip"].values
         print("Precip time series successfully imported!")
 
     def _make_F_means(self):
@@ -256,7 +262,8 @@ class LocSimulation:
         """
         print("Creating time series... (this could take a bit of time)")
         model_params = np.asarray([self.loc.alpha_s, self.loc.alpha_r, self.loc.L, self.loc.gamma, self.loc.nu, self.loc.m_0, self.loc.C, self.loc.mu], dtype=np.float32)
-        self.T_ts, self.m_ts = integrate_SMACM(self.N_seconds, self.ics, self.P_ts, self.F_ts, self.Td_ts, model_params)
+        self.T_ts, self.m_ts = integrate_SMACM(self.N_seconds, self.ics,
+                                               self.dt, self.P_ts, self.F_ts, self.Td_ts, model_params)
         print("Finished!")
 
         if save_output == True:
@@ -271,7 +278,7 @@ class LocSimulation:
            
             ts_ds.to_netcdf(path=''.join([self.path,
                                           self.base_filename, "ts.nc"]),
-                            mode='w', format="NETCDF4", engine="netcdf4") # UNCOMMENT WHEN READY TO PUSH
+                            mode='w', format="NETCDF4", engine="netcdf4")
             
             print("Done!")
 
@@ -297,61 +304,59 @@ class LocSimulation:
             moisture, in incremented simulation, falls below the 5th percentile
             daily mean soil moisture 
         """
-        self._make_daily_maximums() # make daily maximum array
         self._make_daily_means() # make daily mean arrays
 
         print("Calculating 95th and 5th percentiles for each simulation...")
-        self.Tmax_percentiles = np.percentile(self.T_dailymax, 95, axis=1)
         self.Tdaily_percentiles = np.percentile(self.T_dailymean, 95, axis=1)
         self.mdaily_percentiles = np.percentile(self.m_dailymean, 5, axis=1)
 
         print("Calculating means...")
-        self.Tmax_means = np.mean(self.T_dailymax, axis=1)
         self.Tdaily_means = np.mean(self.T_dailymean, axis=1)
         self.mdaily_means = np.mean(self.m_dailymean, axis=1)
 
         print("Calculating exceedences...")
-        baseline_Tmax = np.percentile(self.T_dailymax[0, :], 95) # make baseline 95th percentile for daily ax temp
         baseline_Tdaily = np.percentile(self.T_dailymean[0, :], 95) # make baseline 95th percentile for daily mean temp
         baseline_mdaily = np.percentile(self.m_dailymean[0, :], 5) # make baseline 5th percentile for daily mean soil moisture
 
-        T_increment = self.max_warming * (self.N_simulations - 1)**(-1)
+        """ Define baselines. T_mean_diffs is the difference between the base
+        case simulation mean and the Nth simluation mean. T_exp_increment is
+        the expected warming in each simulation.
+        """
+        T_exp_increment = self.max_warming * (self.N_simulations - 1)**(-1)
+        T_mean_diffs = self.Tdaily_means - self.Tdaily_means[0]
+        print(T_mean_diffs, T_exp_increment)
         ex_filename = ''.join([self.path, self.base_filename, "exc_perc.nc"])
         
         for sim in range(0, self.N_simulations):
-            # tmax dynamic
-            tmp_exceedence_indices_Tmax_dyn = np.where(self.T_dailymax[sim, :] >
-                                                   baseline_Tmax + sim * T_increment) # gives indexes of exceedences 
-            tmp_N_exceedences_Tmax_dyn = np.shape(tmp_exceedence_indices_Tmax_dyn)[1]
-            tmp_percent_exceedences_Tmax_dyn = tmp_N_exceedences_Tmax_dyn * self.N_days**(-1) * 100
-            self.Tmax_exceedences_dyn[sim] = tmp_percent_exceedences_Tmax_dyn
-
-            # t daily dynamic
-            tmp_exceedence_indices_tdaily_dyn = np.where(self.T_dailymean[sim, :] >
-                                                     baseline_Tdaily + sim * T_increment) # gives indexes of exceedences 
-            tmp_N_exceedences_tdaily_dyn = np.shape(tmp_exceedence_indices_tdaily_dyn)[1]
-            tmp_percent_exceedences_tdaily_dyn = tmp_N_exceedences_tdaily_dyn * self.N_days**(-1) * 100
-            self.Tdaily_exceedences_dyn[sim] = tmp_percent_exceedences_tdaily_dyn
-
-            # tmax static
-            tmp_exceedence_indices_Tmax_stat = np.where(self.T_dailymax[sim, :] >
-                                                   baseline_Tmax) # gives indexes of exceedences 
-            tmp_N_exceedences_Tmax_stat = np.shape(tmp_exceedence_indices_Tmax_stat)[1]
-            tmp_percent_exceedences_Tmax_stat = tmp_N_exceedences_Tmax_stat * self.N_days**(-1) * 100
-            self.Tmax_exceedences_stat[sim] = tmp_percent_exceedences_Tmax_stat
-
             # t daily static
-            tmp_exceedence_indices_tdaily_stat = np.where(self.T_dailymean[sim, :] >
+            tmp_exc_indices_tdaily_stat = np.where(self.T_dailymean[sim, :] >
                                                      baseline_Tdaily) # gives indexes of exceedences 
-            tmp_N_exceedences_tdaily_stat = np.shape(tmp_exceedence_indices_tdaily_stat)[1]
-            tmp_percent_exceedences_tdaily_stat = tmp_N_exceedences_tdaily_stat * self.N_days**(-1) * 100
-            self.Tdaily_exceedences_stat[sim] = tmp_percent_exceedences_tdaily_stat
+            tmp_N_exc_tdaily_stat = np.shape(tmp_exc_indices_tdaily_stat)[1]
+            tmp_percent_exc_tdaily_stat = tmp_N_exc_tdaily_stat * self.N_days**(-1) * 100
+            self.Tdaily_exc_stat[sim] = tmp_percent_exc_tdaily_stat
+
+            # t daily expected warming increment 
+            tmp_exc_indices_tdaily_exp = np.where(self.T_dailymean[sim, :] >
+                                                  baseline_Tdaily + sim *
+                                                         T_exp_increment) # gives indexes of exceedences 
+            tmp_N_exc_tdaily_exp = np.shape(tmp_exc_indices_tdaily_exp)[1]
+            tmp_percent_exc_tdaily_exp = tmp_N_exc_tdaily_exp * self.N_days**(-1) * 100
+            self.Tdaily_exc_exp_base[sim] = tmp_percent_exc_tdaily_exp
+            
+            # t daily baseline shifted by difference in mean between baseline
+            # and current simulation 
+            tmp_exc_indices_tdaily_mean = np.where(self.T_dailymean[sim, :] >
+                                                     baseline_Tdaily +
+                                                          T_mean_diffs[sim]) # gives indexes of exceedences 
+            tmp_N_exc_tdaily_mean = np.shape(tmp_exc_indices_tdaily_mean)[1]
+            tmp_percent_exc_tdaily_mean = tmp_N_exc_tdaily_mean * self.N_days**(-1) * 100
+            self.Tdaily_exc_mean_base[sim] = tmp_percent_exc_tdaily_mean
 
             # m daily 
-            tmp_exceedence_indices_mdaily = np.where(self.m_dailymean[sim, :] < baseline_mdaily) # gives indexes of exceedences 
-            tmp_N_exceedences_mdaily = np.shape(tmp_exceedence_indices_mdaily)[1]
-            tmp_percent_exceedences_mdaily = tmp_N_exceedences_mdaily * self.N_days**(-1) * 100
-            self.mdaily_exceedences[sim] = tmp_percent_exceedences_mdaily
+            tmp_exc_indices_mdaily = np.where(self.m_dailymean[sim, :] < baseline_mdaily) # gives indexes of exceedences 
+            tmp_N_exc_mdaily = np.shape(tmp_exc_indices_mdaily)[1]
+            tmp_percent_exc_mdaily = tmp_N_exc_mdaily * self.N_days**(-1) * 100
+            self.mdaily_exc[sim] = tmp_percent_exc_mdaily
 
         print("Finished!")
     
@@ -359,24 +364,19 @@ class LocSimulation:
             print("Saving exceedences product...")
             exceedences_ds = xr.Dataset(data_vars={"mean_Z": (["F"],
                                                               self.Z_means),
-                                                   "Tmax_ex_dyn": (["F"],
-                                                               self.Tmax_exceedences_dyn),
-                                                   "Tdaily_ex_dyn": (["F"],
-                                                                 self.Tdaily_exceedences_dyn),
-                                                    "Tmax_ex_stat": (["F"],
-                                                               self.Tmax_exceedences_stat),
-                                                   "Tdaily_ex_stat": (["F"],
-                                                                 self.Tdaily_exceedences_stat),
+                                                   "Tdaily_exc_stat": (["F"],
+                                                                 self.Tdaily_exc_stat),
+                                                   "Tdaily_exc_exp_base": (["F"],
+                                                                 self.Tdaily_exc_exp_base),
+                                                   "Tdaily_exc_mean_base":
+                                                   (["F"],
+                                                    self.Tdaily_exc_mean_base),
                                                    "mdaily_ex": (["F"],
-                                                                 self.mdaily_exceedences),
-                                                    "Tmax_95perc": (["F"],
-                                                                 self.Tmax_percentiles),
-                                                   "Tdaily_95perc": (["F"],
-                                                                 self.Tdaily_percentiles),
-                                                   "mdaily_5perc": (["F"],
-                                                                 self.mdaily_percentiles),
-                                                    "Tmax_mean_sim": (["F"],
-                                                                 self.Tmax_means),
+                                                                 self.mdaily_exc),
+                                                   "Tdaily_95percs": (["F"],
+                                                                 self.Tdaily_95percs),
+                                                   "mdaily_5percs": (["F"],
+                                                                 self.mdaily_5percs),
                                                    "Tdaily_mean_sim": (["F"],
                                                                  self.Tdaily_means),
                                                    "mdaily_mean_sim": (["F"],
@@ -384,8 +384,6 @@ class LocSimulation:
                                                    "Tdaily_mean": (["F",
                                                                     "day"],
                                                                    self.T_dailymean),
-                                                   "Tmax_daily": (["F", "day"],
-                                                                 self.T_dailymax),
                                                    "mdaily_mean": (["F",
                                                                     "day"],
                                                                    self.m_dailymean),
@@ -399,19 +397,6 @@ class LocSimulation:
             exceedences_ds.to_netcdf(path=ex_filename, mode="w", format="NETCDF4", engine="netcdf4")
 
             print("Done!")
-
-    def _make_daily_maximums(self):
-        """
-        Makes an array of daily maximums for temperature simulation.
-
-        Output:
-            - T_dailymax: an array of daily maximum temperatures, for each simulation.
-        """
-        print("Calculating the daily maximum temperatures in our simulation...")
-        for simulation in range(0, self.N_simulations):
-            for day in range(0, self.N_days):
-                self.T_dailymax[simulation, day] = np.max(self.T_ts[simulation, int(day * self.s_in_day):int((day + 1) * self.s_in_day)]) # take maximum from day's worth of points
-        print("Finnished!")
 
     def _make_daily_means(self):
         """

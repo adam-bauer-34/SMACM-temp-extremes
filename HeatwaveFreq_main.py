@@ -5,16 +5,9 @@ University of Illinois at Urbana Champaign
 adammb4@illinois.edu
 2.26.2022
 
-This code contains a class object which runs a simulation that calculates the 
-percent of days which exceed the 95th percentile of the baseline simulation.
-
 The code increments the temperature by 5 K over the current average
-and measures what percentage of daily max temperature exceeds the baseline set 
-by the current (baseline) 95th percentile, as well as the daily mean, daily max temperature,
-and the daily mean soil moisture.
-
-Notes (mostly to self):
-    DON'T FORGET TO SAVE THE PRECIP TIME SERIES!! 
+and measures what percentage of the daily mean temperature
+and the daily mean soil moisture exceed of fail to reach, resp., a baseline. 
 
 To run: python MasterHeatwaveFreq.py
 """
@@ -36,7 +29,8 @@ desired_runs = [0,1,2,3,4,5]
 """ 
 Import data for runs.
 """
-header, descriptions, data = import_csv("BVZP_research_runs", delimiter=',', header=True, indices=2)
+header, descriptions, data = import_csv("BVZP_research_runs", delimiter=',',
+                                        header=True, indices=2)
 
 for run in desired_runs:
     run_name = descriptions[run][1]
@@ -51,7 +45,7 @@ for run in desired_runs:
     import_precip: have we already made precip for this run? (check data
     directory!)
     """
-    loc_string, max_warming, N_simulations, N_summers, import_precip = data[run]
+    loc_string, max_warming, N_simulations, N_summers, import_precip, dt = data[run]
 
     """
     Cast variables from BVZP_research_runs.csv into proper forms.
@@ -59,6 +53,7 @@ for run in desired_runs:
     max_warming = float(max_warming)
     N_simulations = int(N_simulations)
     N_summers = int(N_summers)
+    dt = int(dt)
 
     """
     import_precip must be boolean.
@@ -82,7 +77,9 @@ for run in desired_runs:
     """
     make class instance for location simulation
     """
-    LOC = LocSimulation(run_name, loc, N_simulations, N_summers, import_precip=import_precip, max_warming=max_warming)
+    LOC = LocSimulation(run_name, loc, N_simulations, N_summers,
+                        import_precip=import_precip,
+                        max_warming=max_warming, dt=dt)
 
     """
     make time series forcing
@@ -92,7 +89,7 @@ for run in desired_runs:
     """
     simulate model equations from SMACM
     """
-    LOC.make_forced_ts(save_output=True)
+    LOC.make_forced_ts(save_output=False)
 
     """
     calculate percentile exceedences for location
