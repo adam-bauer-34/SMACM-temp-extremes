@@ -294,9 +294,6 @@ class LocSimulation:
             Z_means, Tmax, Tdaily, and mdaily exceedences recorded
 
         Output:
-            - Tmax_exceedences: percentage of days where max daily temperature,
-            in incremented simulation, exceed baseline 95th percentile max
-            temperature
             - Tdaily_exceedences: percentage of days where daily mean
             temperature, in incremented simulation, exceeds baseline 95th
             percentile daily mean temperature 
@@ -324,7 +321,6 @@ class LocSimulation:
         """
         T_exp_increment = self.max_warming * (self.N_simulations - 1)**(-1)
         T_mean_diffs = self.Tdaily_means - self.Tdaily_means[0]
-        print(T_mean_diffs, T_exp_increment)
         ex_filename = ''.join([self.path, self.base_filename, "exc_perc.nc"])
         
         for sim in range(0, self.N_simulations):
