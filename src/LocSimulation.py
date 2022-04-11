@@ -60,7 +60,7 @@ class LocSimulation:
 """
 
     def __init__(self, run_name, location, N_simulations, N_summers,
-                 import_precip, max_warming, dt = 10):
+                 import_precip, max_warming, dt):
         self.run_name = run_name
         self.loc = location
         self.N_summers = N_summers
@@ -70,7 +70,7 @@ class LocSimulation:
         self.dt = int(dt) # time step
 
         # make base filenames and path
-        self.path = "/data/" # UNCOMMENT WHEN READY TO PUSH
+        self.path = "/data/"
 
         current_date = datetime.datetime.now()
         year = str(current_date.year)
@@ -304,8 +304,8 @@ class LocSimulation:
         self._make_daily_means() # make daily mean arrays
 
         print("Calculating 95th and 5th percentiles for each simulation...")
-        self.Tdaily_percentiles = np.percentile(self.T_dailymean, 95, axis=1)
-        self.mdaily_percentiles = np.percentile(self.m_dailymean, 5, axis=1)
+        self.Tdaily_95percs = np.percentile(self.T_dailymean, 95, axis=1)
+        self.mdaily_5percs = np.percentile(self.m_dailymean, 5, axis=1)
 
         print("Calculating means...")
         self.Tdaily_means = np.mean(self.T_dailymean, axis=1)
